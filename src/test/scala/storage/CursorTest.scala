@@ -1,7 +1,6 @@
 package com.github.sdreynolds.blob.storage
 
 import java.nio.file.Files
-// Files.createTempFile()
 import scala.util.Using
 import java.io.RandomAccessFile
 
@@ -33,7 +32,15 @@ class CursorTestSuite extends munit.FunSuite {
         cursor = cursor.write(keyName.getBytes(), value.getBytes())
       }
 
-      // @TODO: read the data back
+      val index = cursor.loadFile()
+      assertEquals(index.get(Bytes("Awesome0".getBytes())).get.position, 0L)
+      assertEquals(index.get(Bytes("Awesome0".getBytes())).get.length, 32)
+
+      val lastKey = Bytes("Awesome999".getBytes())
+      assertEquals(index.get(lastKey).get.length, 36)
+      val databaseRead = cursor.read(index.get(lastKey).get.position, index.get(lastKey).get.length)
+
+      assertEquals(databaseRead.getRecord.get.record.get.toSeq, "someValue999".getBytes().toSeq)
     }
   }
 }

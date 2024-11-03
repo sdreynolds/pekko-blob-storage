@@ -1,4 +1,5 @@
 val scala3Version = "3.5.2"
+val pekkoVersion = "1.1.2"
 
 lazy val root = project
   .in(file("."))
@@ -10,6 +11,12 @@ lazy val root = project
 
     libraryDependencies += "org.apache.logging.log4j" % "log4j-api" % "2.24.1",
     libraryDependencies += "org.apache.logging.log4j" % "log4j-core" % "2.24.1",
+
+    libraryDependencies += "org.apache.pekko" %% "pekko-actor-typed" % pekkoVersion,
+    libraryDependencies += "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
+    libraryDependencies += "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
+    libraryDependencies += "org.apache.pekko" %% "pekko-persistence-typed" % pekkoVersion,
+    libraryDependencies += "org.apache.pekko" %% "pekko-persistence-testkit" % pekkoVersion % Test,
 
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.2" % Test
   )

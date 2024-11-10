@@ -52,5 +52,22 @@ class BitCaskActorSuite extends ScalaTestWithActorTestKit with AnyWordSpecLike {
     }
   }
 
+  "Write, then compact and then read what is stored" in {
+    val expectedKey = "actorKey".getBytes()
+    val expectedValue = "actorValue".getBytes()
 
+    // @TODO: how to clean up temporary files
+    val directory = Files.createTempDirectory("actorTesting")
+    val storage = testKit.spawn(BitCask(directory, "testCast"))
+
+    val storageProbe = testKit.createTestProbe[BitCask.Response]()
+
+    storage ! BitCask.Write(expectedKey, expectedValue)
+
+    storage ! BitCask.SyncCompaction
+    storage ! BitCask.Read(expectedKey, storageProbe.ref)
+
+    storageProbe.expectMessage(BitCask.Value(Bytes(expectedValue)))
+
+  }
 }

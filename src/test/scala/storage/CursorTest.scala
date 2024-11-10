@@ -24,23 +24,27 @@ class CursorTestSuite extends munit.FunSuite {
   }
 
   test("1000 Writes and reads") {
-    Using.resource(new RandomAccessFile(Files.createTempFile("store", ".bitcask").toFile(), "rw")) {tempFile =>
-      var cursor = BitCaskCursor.createCursorForRandomFile(tempFile)
+    val tempFile = Files.createTempFile("store", ".bitcask").toFile()
+    var cursor: Option[WritableBitCaskCursor] = None
+    try {
+      cursor = Some(BitCaskCursor.createCursorForFile(tempFile))
       for (i <- 0 until 1000) {
         val keyName = s"Awesome$i"
         val value = s"someValue$i"
-        cursor = cursor.write(keyName.getBytes(), value.getBytes())
+        cursor = cursor.map(_.write(keyName.getBytes(), value.getBytes()))
       }
 
-      val index = cursor.loadFile()
+      val index = cursor.get.loadFile()
       assertEquals(index.get(Bytes("Awesome0".getBytes())).get.position, 0L)
       assertEquals(index.get(Bytes("Awesome0".getBytes())).get.length, 32)
 
       val lastKey = Bytes("Awesome999".getBytes())
       assertEquals(index.get(lastKey).get.length, 36)
-      val databaseRead = cursor.read(index.get(lastKey).get.position, index.get(lastKey).get.length)
+      val databaseRead = cursor.get.read(index.get(lastKey).get.position, index.get(lastKey).get.length)
 
       assertEquals(databaseRead.getRecord.get.record.get.toSeq, "someValue999".getBytes().toSeq)
+    } finally {
+      cursor.map(_.close())
     }
   }
 }

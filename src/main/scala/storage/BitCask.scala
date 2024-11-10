@@ -81,6 +81,28 @@ object BitCask {
             (key -> ValueLocation(location.position, location.length, Some(frozenCursor)))))
       new Index(index, openedCursor, directory)
     }
+
+    def compactIndex(): Index = {
+      val indicesToCompact = index.filter((key, location) => location.cursor.isDefined)
+
+      val newIndex = Index(
+        new HashMap(),
+        createCursorForFile(directory.resolve(Index.fileName()).toFile()),
+        directory
+      )
+
+      indicesToCompact.
+        foldLeft(newIndex) {
+          case (indexToBuild, (key, location)) => {
+            read(key.bytes)
+              .map(value => indexToBuild.write(key.bytes, value))
+              .getOrElse(indexToBuild)
+          }
+        }
+
+      indicesToCompact.foreach((key, location) => location.cursor.get.deleteFile())
+      newIndex
+    }
   }
 
   def apply(directory: Path, name: String): Behavior[Command] = {
@@ -100,6 +122,8 @@ object BitCask {
         }
         case Write(key, value) => internalBehavior(index.write(key, value))
         case Delete(key) => internalBehavior(index.delete(key))
+
+        case SyncCompaction => internalBehavior(index.rollNewWriteFile().compactIndex())
       }
     }
   }
@@ -108,6 +132,7 @@ object BitCask {
   case class Read(key: Array[Byte], replyTo: ActorRef[Response]) extends Command
   case class Write(key: Array[Byte], value: Array[Byte]) extends Command
   case class Delete(key: Array[Byte]) extends Command
+  case object SyncCompaction extends Command
 
   sealed trait Response
   case class Value(value: Bytes) extends Response

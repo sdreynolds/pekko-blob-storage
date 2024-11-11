@@ -78,8 +78,7 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
 
   def delete(key: Array[Byte]): WritableBitCaskCursor = write(key, BitCaskCursor.TOMBSTONE)
 
-  def write(key: Array[Byte], value: Array[Byte]): WritableBitCaskCursor = {
-    val timestamp = (System.currentTimeMillis / 1000).toInt
+  def writeAtTimestamp(key: Array[Byte], value: Array[Byte], timestamp: Int): WritableBitCaskCursor = {
     val keySize = key.length
     val valueSize = value.length
     logger.debug("writing sizes of {} and {}", keySize, valueSize)
@@ -110,6 +109,11 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
     new WritableBitCaskCursor(fileHandle, file, writePosition + length,
       Some(BitCaskWriteResult(writePosition, length, timestamp)),
       None)
+  }
+
+  def write(key: Array[Byte], value: Array[Byte]): WritableBitCaskCursor = {
+    val timestamp = (System.currentTimeMillis / 1000).toInt
+    writeAtTimestamp(key, value, timestamp)
   }
 
   def makeReadOnly(): ReadOnlyBitCaskCursor = new ReadOnlyBitCaskCursor(fileHandle, file, lastRead)
@@ -195,7 +199,7 @@ abstract class BitCaskCursor(
       val valueSize = BitCaskCursor.readUInt32(internalBuffer(10), internalBuffer(11), internalBuffer(12), internalBuffer(13))
 
 
-      val location = ValueLocation(position, valueSize + keySize + BitCaskCursor.HEADER_SIZE, Some(this))
+      val location = ValueLocation(position, valueSize + keySize + BitCaskCursor.HEADER_SIZE, timestamp, Some(this))
 
       val valueReadResult = fileHandle.read(valueBuffer, 0, valueSize)
 

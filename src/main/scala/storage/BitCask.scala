@@ -49,15 +49,23 @@ object BitCask {
       writableCursor.close()
     }
 
-    def write(key: Array[Byte], value: Array[Byte]): Index = {
-      val writeResult = writableCursor.write(key, value)
-      index += (Bytes(key) -> ValueLocation(writeResult.getWriteOffset.get, writeResult.getWriteSize.get, None))
+    def writeAtTimestamp(key: Array[Byte], value: Array[Byte], timestamp: Int): Index = {
+      val writeResult = writableCursor.writeAtTimestamp(key, value, timestamp)
+      index += (Bytes(key) -> ValueLocation(writeResult.getWriteOffset.get, writeResult.getWriteSize.get, timestamp, None))
       new Index(index, writeResult, directory)
     }
 
+    def write(key: Array[Byte], value: Array[Byte]): Index = {
+      val timestamp = (System.currentTimeMillis / 1000).toInt
+      writeAtTimestamp(key, value, timestamp)
+    }
+
     def delete(key: Array[Byte]): Index = {
+      // @TODO: needs a timestamp delete
+      val timestamp = (System.currentTimeMillis / 1000).toInt
+
       val deleteCursor = writableCursor.delete(key)
-      index += (Bytes(key) -> ValueLocation(deleteCursor.getWriteOffset.get, deleteCursor.getWriteSize.get, None))
+      index += (Bytes(key) -> ValueLocation(deleteCursor.getWriteOffset.get, deleteCursor.getWriteSize.get, timestamp, None))
       new Index(index, deleteCursor, directory)
     }
 
@@ -78,7 +86,7 @@ object BitCask {
         index
           .filter((key: Bytes, location: ValueLocation) => location.cursor.isEmpty)
           .map((key: Bytes, location: ValueLocation) =>
-            (key -> ValueLocation(location.position, location.length, Some(frozenCursor)))))
+            (key -> location.copy(cursor=Some(frozenCursor)))))
       new Index(index, openedCursor, directory)
     }
 
@@ -140,7 +148,7 @@ object BitCask {
 
 }
 
-case class ValueLocation(position: Long, length: Int, cursor: Option[BitCaskCursor])
+case class ValueLocation(position: Long, length: Int, timestamp: Int, cursor: Option[BitCaskCursor])
 
 object Bytes {
   def apply(bytes: Array[Byte]) = new Bytes(bytes)

@@ -46,23 +46,26 @@ object BitCaskCursor {
 case class BitCaskWriteResult(offset: Long, recordSize: Int, timestamp: Int)
 case class BitCaskReadResult(record: Option[Array[Byte]])
 
-class ReadOnlyBitCaskCursor(fileHandle: RandomAccessFile, file: File, lastRead: Option[BitCaskReadResult])
-    extends BitCaskCursor(fileHandle, file, lastRead) {
+class ReadOnlyBitCaskCursor(fileHandle: RandomAccessFile, file: File, var lastRead: Option[BitCaskReadResult])
+    extends BitCaskCursor(fileHandle, file) {
 
   def read(position: Long, recordTotalLength: Int): BitCaskCursor = {
     if position + recordTotalLength > fileHandle.length() then
       this
     else
       val newRead = readInternal(position, recordTotalLength)
-      new ReadOnlyBitCaskCursor(fileHandle, file, Some(BitCaskReadResult(newRead)))
+      lastRead = Some(BitCaskReadResult(newRead))
+      this
   }
+
+  def getRecord: Option[BitCaskReadResult] = lastRead
 }
 
 class WritableBitCaskCursor(fileHandle: RandomAccessFile,
   file: File,
   writePosition: Long,
   lastWrite: Option[BitCaskWriteResult],
-  lastRead: Option[BitCaskReadResult]) extends BitCaskCursor(fileHandle, file, lastRead) {
+  var lastRead: Option[BitCaskReadResult]) extends BitCaskCursor(fileHandle, file) {
 
   def getWriteOffset = lastWrite.map(r => r.offset)
   def getWriteSize = lastWrite.map(r => r.recordSize)
@@ -72,8 +75,9 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
     if position + recordTotalLength > fileHandle.length() then return this
 
     val newRead = readInternal(position, recordTotalLength)
-    new WritableBitCaskCursor(fileHandle, file, writePosition, None,
-      Some(BitCaskReadResult(newRead)))
+    // lastRead.isDefined being set will force the write to seak to the end of the file
+    lastRead = Some(BitCaskReadResult(newRead))
+    this
   }
 
   def delete(key: Array[Byte]): WritableBitCaskCursor = write(key, BitCaskCursor.TOMBSTONE)
@@ -106,6 +110,7 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
 
     fileHandle.write(internalBuffer)
 
+    lastRead = None
     new WritableBitCaskCursor(fileHandle, file, writePosition + length,
       Some(BitCaskWriteResult(writePosition, length, timestamp)),
       None)
@@ -118,17 +123,17 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
 
   def makeReadOnly(): ReadOnlyBitCaskCursor = new ReadOnlyBitCaskCursor(fileHandle, file, lastRead)
 
+  def getRecord: Option[BitCaskReadResult] = lastRead
+
 }
 
 abstract class BitCaskCursor(
   fileHandle: RandomAccessFile,
-  file: File,
-  lastRead: Option[BitCaskReadResult])
-    extends AutoCloseable {
+  file: File) extends AutoCloseable {
 
   protected val logger = LogManager.getLogger(classOf[BitCaskCursor])
 
-  def getRecord = lastRead
+  def getRecord: Option[BitCaskReadResult]
 
   def close() = fileHandle.close()
 

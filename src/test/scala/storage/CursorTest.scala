@@ -34,7 +34,7 @@ class CursorTestSuite extends munit.FunSuite {
         cursor = cursor.map(_.write(keyName.getBytes(), value.getBytes()))
       }
 
-      val index = cursor.get.loadFile()
+      val index = cursor.get.makeReadOnly().loadFile()
       assertEquals(index.get(Bytes("Awesome0".getBytes())).get.position, 0L)
       assertEquals(index.get(Bytes("Awesome0".getBytes())).get.length, 32)
 

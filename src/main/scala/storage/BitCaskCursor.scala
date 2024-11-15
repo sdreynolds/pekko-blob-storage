@@ -59,6 +59,58 @@ class ReadOnlyBitCaskCursor(fileHandle: RandomAccessFile, file: File, var lastRe
   }
 
   def getRecord: Option[BitCaskReadResult] = lastRead
+
+
+  def loadFile(): HashMap[Bytes, ValueLocation] = {
+    val index: HashMap[Bytes, ValueLocation] = new HashMap()
+    fileHandle.seek(0)
+
+    val internalBuffer = new Array[Byte](BitCaskCursor.HEADER_SIZE)
+
+    // valueBuffer is kept internally and never handed off
+    val valueBuffer = new Array[Byte](255)
+
+    while (fileHandle.getFilePointer() < fileHandle.length()) {
+
+      val position = fileHandle.getFilePointer()
+
+      val headerReadResult = fileHandle.read(internalBuffer, 0, BitCaskCursor.HEADER_SIZE)
+
+      if headerReadResult < 0 then
+        throw new RuntimeException("Failed to read the header")
+
+      val expectedCrc = BitCaskCursor.readUInt32(internalBuffer(0), internalBuffer(1), internalBuffer(2), internalBuffer(3))
+      val timestamp = BitCaskCursor.readUInt32(internalBuffer(4), internalBuffer(5), internalBuffer(6), internalBuffer(7))
+
+      val keySize = BitCaskCursor.readUInt16(internalBuffer(8), internalBuffer(9))
+      val keyBuffer = new Array[Byte](keySize)
+      val keyReadResult = fileHandle.read(keyBuffer, 0, keySize)
+
+      val valueSize = BitCaskCursor.readUInt32(internalBuffer(10), internalBuffer(11), internalBuffer(12), internalBuffer(13))
+
+
+      val location = ValueLocation(position, valueSize + keySize + BitCaskCursor.HEADER_SIZE, timestamp, Some(this))
+
+      val valueReadResult = fileHandle.read(valueBuffer, 0, valueSize)
+
+      val crc = new CRC32
+      // Timestamp plus key and value sizes
+      crc.update(internalBuffer, 4, 10)
+      // Key bytes
+      crc.update(keyBuffer, 0, keySize)
+      // value bytes
+      crc.update(valueBuffer, 0, valueSize)
+
+      if crc.getValue.toInt != expectedCrc then
+        throw new IOException("CRC for record did not match CRC on disk")
+
+      index += (Bytes(keyBuffer) -> location)
+    }
+
+    // At the end of this the cursor is at the end of the file where writes happen.
+    // therefore, no internal state has changed and the cursor can be used for writing
+    index
+  }
 }
 
 class WritableBitCaskCursor(fileHandle: RandomAccessFile,
@@ -174,56 +226,5 @@ abstract class BitCaskCursor(
       None
     else
       Some(value)
-  }
-
-  def loadFile(): HashMap[Bytes, ValueLocation] = {
-    val index: HashMap[Bytes, ValueLocation] = new HashMap()
-    fileHandle.seek(0)
-
-    val internalBuffer = new Array[Byte](BitCaskCursor.HEADER_SIZE)
-
-    // valueBuffer is kept internally and never handed off
-    val valueBuffer = new Array[Byte](255)
-
-    while (fileHandle.getFilePointer() < fileHandle.length()) {
-
-      val position = fileHandle.getFilePointer()
-
-      val headerReadResult = fileHandle.read(internalBuffer, 0, BitCaskCursor.HEADER_SIZE)
-
-      if headerReadResult < 0 then
-        throw new RuntimeException("Failed to read the header")
-
-      val expectedCrc = BitCaskCursor.readUInt32(internalBuffer(0), internalBuffer(1), internalBuffer(2), internalBuffer(3))
-      val timestamp = BitCaskCursor.readUInt32(internalBuffer(4), internalBuffer(5), internalBuffer(6), internalBuffer(7))
-
-      val keySize = BitCaskCursor.readUInt16(internalBuffer(8), internalBuffer(9))
-      val keyBuffer = new Array[Byte](keySize)
-      val keyReadResult = fileHandle.read(keyBuffer, 0, keySize)
-
-      val valueSize = BitCaskCursor.readUInt32(internalBuffer(10), internalBuffer(11), internalBuffer(12), internalBuffer(13))
-
-
-      val location = ValueLocation(position, valueSize + keySize + BitCaskCursor.HEADER_SIZE, timestamp, Some(this))
-
-      val valueReadResult = fileHandle.read(valueBuffer, 0, valueSize)
-
-      val crc = new CRC32
-      // Timestamp plus key and value sizes
-      crc.update(internalBuffer, 4, 10)
-      // Key bytes
-      crc.update(keyBuffer, 0, keySize)
-      // value bytes
-      crc.update(valueBuffer, 0, valueSize)
-
-      if crc.getValue.toInt != expectedCrc then
-        throw new IOException("CRC for record did not match CRC on disk")
-
-      index += (Bytes(keyBuffer) -> location)
-    }
-
-    // At the end of this the cursor is at the end of the file where writes happen.
-    // therefore, no internal state has changed and the cursor can be used for writing
-    index
   }
 }

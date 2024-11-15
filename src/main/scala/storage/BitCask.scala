@@ -148,7 +148,7 @@ object BitCask {
 
 }
 
-case class ValueLocation(position: Long, length: Int, timestamp: Int, cursor: Option[BitCaskCursor])
+case class ValueLocation(position: Long, length: Int, timestamp: Int, cursor: Option[ReadOnlyBitCaskCursor])
 
 object Bytes {
   def apply(bytes: Array[Byte]) = new Bytes(bytes)

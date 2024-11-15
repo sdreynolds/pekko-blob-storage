@@ -18,8 +18,7 @@ lazy val root = project
     libraryDependencies += "org.apache.pekko" %% "pekko-actor-typed" % pekkoVersion,
     libraryDependencies += "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
     libraryDependencies += "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
-    libraryDependencies += "org.apache.pekko" %% "pekko-persistence-typed" % pekkoVersion,
-    libraryDependencies += "org.apache.pekko" %% "pekko-persistence-testkit" % pekkoVersion % Test,
+    libraryDependencies += "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
 
     libraryDependencies += "org.scalameta" %% "munit" % "1.0.2" % Test,
     libraryDependencies += "org.scalatest" %% "scalatest" % scalaTestVersion,

@@ -44,14 +44,14 @@ class IndexTest extends munit.FunSuite {
     }
   }
 
-  test("Data in the current write cursor is not present in the compacted index") {
+  test("Data in the current write cursor is present in the compacted index") {
     Using.resource(BitCask.Index.createIndexFromDirectory(Files.createTempDirectory("dbfiles"))) { index =>
       val keyBytes = "indexTestingKey".getBytes
 
       // Do not roll the index, keeping the current write cursor active
       Using.resource(index.write(keyBytes, "indexValue".getBytes).compactIndex()) { compacted =>
 
-        assertEquals(compacted.read(keyBytes), None)
+        assertEquals(compacted.read(keyBytes).get.toSeq, "indexValue".getBytes.toSeq)
       }
     }
   }

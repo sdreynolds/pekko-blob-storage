@@ -11,9 +11,6 @@ import org.apache.pekko.actor.typed.ActorRef
 import org.apache.pekko.actor.typed.ActorSystem
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.persistence.typed.PersistenceId
-import org.apache.pekko.persistence.typed.scaladsl.Effect
-import org.apache.pekko.persistence.typed.scaladsl.EventSourcedBehavior
 import java.nio.file.Path
 
 import scala.jdk.StreamConverters._
@@ -92,24 +89,16 @@ object BitCask {
 
     def compactIndex(): Index = {
       val indicesToCompact = index.filter((key, location) => location.cursor.isDefined)
+      val locationsToCombine = indicesToCompact.values.toSeq
+      val newFile = directory.resolve(Index.fileName()).toFile()
+      val compactedCursor = BitCaskCursor.compactLocations(locationsToCombine, newFile)
 
-      val newIndex = Index(
-        new HashMap(),
-        createCursorForFile(directory.resolve(Index.fileName()).toFile()),
-        directory
+      index.addAll(
+        indicesToCompact.map((key, location) => (key -> location.copy(cursor=Some(compactedCursor))))
       )
 
-      indicesToCompact.
-        foldLeft(newIndex) {
-          case (indexToBuild, (key, location)) => {
-            read(key.bytes)
-              .map(value => indexToBuild.write(key.bytes, value))
-              .getOrElse(indexToBuild)
-          }
-        }
-
-      indicesToCompact.foreach((key, location) => location.cursor.get.deleteFile())
-      newIndex
+      indicesToCompact.values.foreach(location => location.cursor.foreach(_.deleteFile()))
+      new Index(index, writableCursor, directory)
     }
   }
 
@@ -131,7 +120,7 @@ object BitCask {
         case Write(key, value) => internalBehavior(index.write(key, value))
         case Delete(key) => internalBehavior(index.delete(key))
 
-        case SyncCompaction => internalBehavior(index.rollNewWriteFile().compactIndex())
+        case SyncCompaction => internalBehavior(index.compactIndex())
       }
     }
   }

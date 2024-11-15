@@ -41,6 +41,20 @@ object BitCaskCursor {
     buffer.update(start, (value >>> 8).toByte)
     buffer.update(start + 1, value.toByte)
   }
+
+  def compactLocations(locations: Seq[ValueLocation], emptyFile: File): ReadOnlyBitCaskCursor = {
+    locations.foldLeft(createCursorForFile(emptyFile))((writableCursor, location) => {
+
+      // Raw copy bytes from readonly to the writable cursor
+      location.cursor.foreach(readOnly => {
+        val internalBuffer = new Array[Byte](location.length)
+        readOnly.readIntoBuffer(location.position, location.length, internalBuffer)
+        writableCursor.writeBytesToFile(internalBuffer)
+      })
+
+      writableCursor
+    }).makeReadOnly()
+  }
 }
 
 case class BitCaskWriteResult(offset: Long, recordSize: Int, timestamp: Int)
@@ -59,7 +73,6 @@ class ReadOnlyBitCaskCursor(fileHandle: RandomAccessFile, file: File, var lastRe
   }
 
   def getRecord: Option[BitCaskReadResult] = lastRead
-
 
   def loadFile(): HashMap[Bytes, ValueLocation] = {
     val index: HashMap[Bytes, ValueLocation] = new HashMap()
@@ -137,7 +150,6 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
   def writeAtTimestamp(key: Array[Byte], value: Array[Byte], timestamp: Int): WritableBitCaskCursor = {
     val keySize = key.length
     val valueSize = value.length
-    logger.debug("writing sizes of {} and {}", keySize, valueSize)
 
     // @TODO: Check the size of the buffers to constraint to ints
 
@@ -157,10 +169,12 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
 
     BitCaskCursor.writeInt32(crcValue, internalBuffer, 0)
 
+    logger.debug("writing sizes of {} and {} with CRC of {}", keySize, valueSize, crcValue)
+
     if lastRead.isDefined then
       fileHandle.seek(writePosition)
 
-    fileHandle.write(internalBuffer)
+    writeBytesToFile(internalBuffer)
 
     lastRead = None
     new WritableBitCaskCursor(fileHandle, file, writePosition + length,
@@ -196,14 +210,19 @@ abstract class BitCaskCursor(
 
   def read(position: Long, recordTotalLength: Int): BitCaskCursor
 
+  protected def readIntoBuffer(position: Long, numBytes: Int, buffer: Array[Byte]): Unit = {
+    // @TODO: check for buffer size??
+    fileHandle.seek(position)
+    val bytesRead = fileHandle.read(buffer, 0, numBytes)
+  }
+
+  protected def writeBytesToFile(internalBuffer: Array[Byte]): Unit = fileHandle.write(internalBuffer)
+
   protected def readInternal(position: Long, recordTotalLength: Int): Option[Array[Byte]] = {
     // creating an array buffer for this read is wasteful, we should pass a
     // buffer around
     val internalBuffer = new Array[Byte](recordTotalLength)
-
-    fileHandle.seek(position)
-
-    val bytesRead = fileHandle.read(internalBuffer, 0, recordTotalLength)
+    readIntoBuffer(position, recordTotalLength, internalBuffer)
 
     val expectedCrc = BitCaskCursor.readUInt32(internalBuffer(0), internalBuffer(1), internalBuffer(2), internalBuffer(3))
     val crc = new CRC32

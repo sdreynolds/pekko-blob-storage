@@ -57,13 +57,13 @@ object BitCask {
       writeAtTimestamp(key, value, timestamp)
     }
 
-    def delete(key: Array[Byte]): Index = {
-      // @TODO: needs a timestamp delete
-      val timestamp = (System.currentTimeMillis / 1000).toInt
+    def deleteAtTimestamp(key: Array[Byte], timestamp: Int): Index = {
+      writeAtTimestamp(key, BitCaskCursor.TOMBSTONE, timestamp)
+    }
 
-      val deleteCursor = writableCursor.delete(key)
-      index += (Bytes(key) -> ValueLocation(deleteCursor.getWriteOffset.get, deleteCursor.getWriteSize.get, timestamp, None))
-      new Index(index, deleteCursor, directory)
+    def delete(key: Array[Byte]): Index = {
+      val timestamp = (System.currentTimeMillis / 1000).toInt
+      deleteAtTimestamp(key, timestamp)
     }
 
     def read(key: Array[Byte]): Option[Array[Byte]] = {

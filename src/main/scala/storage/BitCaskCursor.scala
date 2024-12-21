@@ -145,8 +145,6 @@ class WritableBitCaskCursor(fileHandle: RandomAccessFile,
     this
   }
 
-  def delete(key: Array[Byte]): WritableBitCaskCursor = write(key, BitCaskCursor.TOMBSTONE)
-
   def writeAtTimestamp(key: Array[Byte], value: Array[Byte], timestamp: Int): WritableBitCaskCursor = {
     val keySize = key.length
     val valueSize = value.length
